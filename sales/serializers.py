@@ -1,0 +1,149 @@
+# backend/sales/serializers.py
+from rest_framework import serializers
+from .models import Sale, SaleItem, Customer, SavedCart
+from inventory.serializers import ProductSerializer
+
+class SaleItemSerializer(serializers.ModelSerializer):
+    product_details = ProductSerializer(source='product', read_only=True)
+    product_name = serializers.CharField(source='product.name', read_only=True)
+    
+    class Meta:
+        model = SaleItem
+        fields = '__all__'
+
+class SaleSerializer(serializers.ModelSerializer):
+    items = SaleItemSerializer(many=True, read_only=True)
+    staff_name = serializers.CharField(source='staff.username', read_only=True)
+    room_number = serializers.CharField(source='room.room_number', read_only=True)
+    
+    class Meta:
+        model = Sale
+        fields = '__all__'
+        read_only_fields = ['transaction_number', 'created_at']
+
+class CreateSaleSerializer(serializers.Serializer):
+    guest_name = serializers.CharField(required=False, allow_blank=True)
+    room_id = serializers.UUIDField(required=False, allow_null=True)
+    payment_method = serializers.ChoiceField(choices=['cash', 'card', 'transfer', 'room_charge'])
+    amount_paid = serializers.DecimalField(max_digits=10, decimal_places=2, required=False)
+    notes = serializers.CharField(required=False, allow_blank=True)
+    items = serializers.ListField(
+        child=serializers.DictField()
+    )
+    
+    def validate_items(self, items):
+        if not items:
+            raise serializers.ValidationError("At least one item is required")
+        
+        for item in items:
+            if not item.get('product_id'):
+                raise serializers.ValidationError("Each item must have a product_id")
+            if not item.get('quantity', 0) > 0:
+                raise serializers.ValidationError("Quantity must be positive")
+            if not item.get('unit_price', 0) > 0:
+                raise serializers.ValidationError("Unit price must be positive")
+        
+        return items
+    
+    def create(self, validated_data):
+        items_data = validated_data.pop('items')
+        amount_paid = validated_data.pop('amount_paid', 0)
+        
+        # Create sale
+        sale = Sale.objects.create(
+            staff=self.context['request'].user,
+            amount_paid=amount_paid,
+            **validated_data
+        )
+        
+        # Create sale items
+        subtotal = 0
+        for item_data in items_data:
+            item = SaleItem.objects.create(
+                sale=sale,
+                product_id=item_data['product_id'],
+                quantity=item_data['quantity'],
+                unit_price=item_data['unit_price'],
+                discount=item_data.get('discount', 0)
+            )
+            subtotal += item.subtotal
+        
+        # Calculate change for cash payments
+        if validated_data['payment_method'] == 'cash' and amount_paid > sale.total_amount:
+            sale.change = amount_paid - sale.total_amount
+            sale.save()
+        
+        return sale
+
+class TodaySummarySerializer(serializers.Serializer):
+    total_sales = serializers.DecimalField(max_digits=10, decimal_places=2)
+    total_transactions = serializers.IntegerField()
+    cash_sales = serializers.DecimalField(max_digits=10, decimal_places=2)
+    card_sales = serializers.DecimalField(max_digits=10, decimal_places=2)
+    room_charges = serializers.DecimalField(max_digits=10, decimal_places=2)
+
+
+
+class CustomerSerializer(serializers.ModelSerializer):
+    full_name = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Customer
+        fields = '__all__'
+    
+    def get_full_name(self, obj):
+        return f"{obj.first_name} {obj.last_name}"
+
+class SavedCartSerializer(serializers.ModelSerializer):
+    customer_details = CustomerSerializer(source='customer', read_only=True)
+    
+    class Meta:
+        model = SavedCart
+        fields = '__all__'
+
+class CreateSavedCartSerializer(serializers.Serializer):
+    customer_id = serializers.UUIDField(required=False)
+    customer_data = serializers.DictField(required=False)
+    cart_items = serializers.ListField()
+    notes = serializers.CharField(required=False, allow_blank=True)
+    
+    def validate(self, data):
+        if not data.get('customer_id') and not data.get('customer_data'):
+            raise serializers.ValidationError("Either customer_id or customer_data is required")
+        if not data.get('cart_items'):
+            raise serializers.ValidationError("Cart items are required")
+        return data
+    
+    def create(self, validated_data):
+        from .models import Customer, SavedCart
+        
+        # Get or create customer
+        if validated_data.get('customer_id'):
+            customer = Customer.objects.get(id=validated_data['customer_id'])
+        else:
+            customer_data = validated_data['customer_data']
+            customer, created = Customer.objects.get_or_create(
+                email=customer_data.get('email'),
+                defaults={
+                    'first_name': customer_data.get('first_name', ''),
+                    'last_name': customer_data.get('last_name', ''),
+                    'phone': customer_data.get('phone', ''),
+                }
+            )
+        
+        # Calculate totals
+        subtotal = sum(item['quantity'] * item['unit_price'] for item in validated_data['cart_items'])
+        tax = subtotal * 0.075
+        total = subtotal + tax
+        
+        # Create saved cart
+        cart = SavedCart.objects.create(
+            customer=customer,
+            cart_data=validated_data['cart_items'],
+            subtotal=subtotal,
+            tax=tax,
+            total=total,
+            notes=validated_data.get('notes', '')
+        )
+        
+        return cart
