@@ -9,4 +9,6 @@ router.register('', views.BookingViewSet, basename='booking')
 
 urlpatterns = [
     path('', include(router.urls)),
+    path('public/', views.public_booking, name='public-booking'),
+    path('availability/', views.check_availability, name='check-availability'),
 ]
