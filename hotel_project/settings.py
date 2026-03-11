@@ -39,8 +39,9 @@ INSTALLED_APPS = [
 
 # MIDDLEWARE - CorsMiddleware MUST be at the very top
 MIDDLEWARE = [
+    'bookings.middleware.PublicBypassMiddleware', 
     'accounts.middleware.DisableCSRFForAPI',
-    'corsheaders.middleware.CorsMiddleware',  # This MUST be the first one
+    'corsheaders.middleware.CorsMiddleware', 
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -171,12 +172,28 @@ CORS_ALLOW_HEADERS = [
 # For development only - you can temporarily enable this
 # CORS_ALLOW_ALL_ORIGINS = True
 
+# Disable authentication for these specific paths
+import re
+class DisableAuthForPublicPaths:
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        if request.path.startswith('/api/bookings/public/'):
+            # Mock authentication
+            from django.contrib.auth.models import AnonymousUser
+            request.user = AnonymousUser()
+        return self.get_response(request)
+
+MIDDLEWARE.append('hotel_project.settings.DisableAuthForPublicPaths')
+
 # CSRF Trusted Origins (sometimes needed)
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
     "http://172.20.10.4:3000",
 ]
+
 # ====== EMAIL CONFIGURATION (BREVO) ======
 
 # Brevo/Anymail Configuration

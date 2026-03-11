@@ -26,6 +26,7 @@ urlpatterns = [
     path('api/bookings/', include('bookings.urls')), 
     path('api/reports/', include('reports.urls')), 
     path('api/sales/', include('sales.urls')),
+
 ]
 from rest_framework.renderers import JSONRenderer
 REST_FRAMEWORK = {
