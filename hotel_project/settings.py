@@ -24,11 +24,12 @@ INSTALLED_APPS = [
     
     # Third party apps
     'rest_framework',
-    'corsheaders',  # Make sure this is here
+    'corsheaders', 
     'rest_framework_simplejwt',
+    'rest_framework.authtoken',
     'anymail',
     
-    # Your apps
+    # Created apps
     'accounts',
     'rooms',
     'bookings',
@@ -115,13 +116,18 @@ AUTH_USER_MODEL = 'accounts.User'
 # JWT Settings
 from datetime import timedelta
 
+
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
-        'rest_framework.authentication.SessionAuthentication',
+        'rest_framework.authentication.TokenAuthentication',  
+        'rest_framework_simplejwt.authentication.JWTAuthentication', 
+        'rest_framework.authentication.SessionAuthentication', 
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
+    ],
+    'DEFAULT_PARSER_CLASSES': [
+        'rest_framework.parsers.JSONParser',
     ],
 }
 

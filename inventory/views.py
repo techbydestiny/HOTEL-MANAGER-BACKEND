@@ -23,9 +23,14 @@ class ProductViewSet(viewsets.ModelViewSet):
     """
     Manage products
     """
-    queryset = Product.objects.all().order_by('name')
+    queryset = Product.objects.filter(is_active=True).order_by('name')
     serializer_class = ProductSerializer
     
+    def perform_destroy(self, instance):
+        # Soft delete - just mark as inactive
+        instance.is_active = False
+        instance.save()
+
     def get_permissions(self):
         """Only CEO can delete products"""
         if self.action == 'destroy':
