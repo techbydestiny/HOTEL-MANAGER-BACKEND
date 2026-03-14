@@ -35,6 +35,7 @@ INSTALLED_APPS = [
     'inventory',
     'sales',
     'reports',
+    'consumables',
 ]
 
 # MIDDLEWARE - CorsMiddleware MUST be at the very top
